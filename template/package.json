@@ -1,0 +1,41 @@
+{
+  "name": "my-project",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Project with full AI code quality framework",
+  "scripts": {
+    "dev": "echo 'Replace with your dev command'",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "lint": "biome check src/",
+    "lint:fix": "biome check --write src/",
+    "knip": "knip",
+    "duplication": "jscpd src/ --threshold 5",
+    "circular": "madge --circular --extensions ts,tsx src/",
+    "quality": "pnpm run typecheck && pnpm run lint && pnpm run knip && pnpm run duplication && pnpm run circular",
+    "precommit": "pnpm run typecheck && pnpm run test && pnpm run lint",
+    "mutate": "stryker run",
+    "mutate:incremental": "stryker run --incremental",
+    "mutate:module": "stryker run --mutate"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.3.14",
+    "@stryker-mutator/core": "^9.5.1",
+    "@stryker-mutator/typescript-checker": "^9.5.1",
+    "@stryker-mutator/vitest-runner": "^9.5.1",
+    "@types/node": "^20.0.0",
+    "@vitest/coverage-v8": "^2.0.0",
+    "jscpd": "^4.0.8",
+    "knip": "^5.83.1",
+    "lefthook": "^2.1.0",
+    "madge": "^8.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^2.0.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
