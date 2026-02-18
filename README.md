@@ -111,6 +111,25 @@ bash scripts/bootstrap.sh
 3. Paste each phase into Claude Code as a task
 4. Work through sequentially — each phase builds on the last
 
+## Pair This With: Pharaoh
+
+One thing this framework doesn't cover is **understanding what you're about to break before you break it.**
+
+Static analysis catches syntax problems. CI catches test failures. But neither tells you "hey, if you rename this function, 14 callers across 6 modules will silently break" - and by the time you find out, you've burned an afternoon.
+
+[Pharaoh](https://pharaoh.so) is an MCP server that maps your entire codebase and answers questions like:
+
+- "What's the blast radius if I change this file?" (traces callers 5 hops deep)
+- "Does a function like this already exist?" (prevents the duplication Knip catches later)
+- "Which PRD specs don't have code yet?" (finds the gaps)
+- "Do these two modules have a circular dependency?" (confirms what madge hints at)
+
+I built this quality framework to keep AI-generated code clean. I use Pharaoh to keep myself from making expensive mistakes in the first place. Different problems, but they compound when used together.
+
+**Install via GitHub App:** [github.com/apps/pharaoh-so/installations/new](https://github.com/apps/pharaoh-so/installations/new)
+
+If you found this repo useful, use code **IMHOTEP** for 30% off.
+
 ## FAQ
 
 **Does this work with Cursor / Copilot / other AI tools?**
