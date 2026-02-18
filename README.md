@@ -24,10 +24,10 @@ A 1,200-line document containing **6 self-contained phases**, each designed to b
 
 | Phase | What It Does | Time |
 |-------|-------------|------|
-| **1. Foundation** | Install Biome, Knip, Lefthook, Claude Code hooks | 1-2 hrs |
-| **2. Strictness** | TypeScript strict mode, coverage thresholds | 2-4 hrs |
-| **3. Mutation Testing** | Stryker integration — prove your tests work | 3-5 hrs |
-| **4. CI/CD** | GitHub Actions quality gates that block bad merges | 2-3 hrs |
+| **1. Foundation** | Install Biome, Knip, Lefthook/Husky, Claude Code hooks | 1-2 hrs |
+| **2. CI/CD + Strictness** | GitHub Actions quality gates, TypeScript strict mode | 1-2 hrs |
+| **3. Mutation Testing** | Stryker integration — prove your tests work | 2-3 hrs |
+| **4. Template Repository** | Reusable project template with full framework | 2-3 hrs |
 | **5. Cleanup** | Remove dead code, audit tests, consolidate duplication | 1-2 weeks |
 | **6. Workflow Mastery** | Daily/weekly/monthly rituals, advanced patterns | Ongoing |
 
@@ -45,7 +45,7 @@ Includes: Biome config, Knip config, Lefthook pre-commit hooks, Claude Code hook
 |------|------|-------------|
 | [Biome](https://biomejs.dev) | Linter + formatter | Fast, opinionated, replaces ESLint + Prettier |
 | [Knip](https://knip.dev) | Dead code detection | Finds unused exports, files, dependencies |
-| [Lefthook](https://github.com/evilmartians/lefthook) | Git hooks | Fast, no Node dependency for hooks |
+| [Lefthook](https://github.com/evilmartians/lefthook) or [Husky](https://typicode.github.io/husky/) | Git hooks | Lefthook: fast parallel execution. Husky: widely adopted, simple shell scripts |
 | [Stryker](https://stryker-mutator.io) | Mutation testing | Proves tests actually catch bugs |
 | [jscpd](https://github.com/kucherenko/jscpd) | Duplication detection | Finds copy-paste across codebase |
 | [madge](https://github.com/pahen/madge) | Circular deps | Catches architectural tangles |
@@ -75,7 +75,7 @@ The secret weapon. Three hooks that run automatically:
 
 - **Post-edit hook** — Typechecks and lints after every file edit. Claude gets instant feedback and fixes issues before moving on.
 - **Pre-write hook** — Blocks writes to `.env`, lock files, `dist/`, and other sensitive files. Claude physically cannot modify them.
-- **Stop hook** — Runs typecheck + lint when Claude tries to finish. If anything is broken, Claude is forced to fix it before completing.
+- **Stop hook** — Runs typecheck + lint + knip when Claude tries to finish. If anything is broken or unused code was introduced, Claude is forced to fix it before completing.
 
 This creates a closed feedback loop that doesn't exist in other AI coding setups.
 

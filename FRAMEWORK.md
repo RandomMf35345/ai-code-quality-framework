@@ -230,6 +230,13 @@ if [ $? -ne 0 ]; then
   exit 2
 fi
 
+# Dead code (knip)
+npx knip 2>&1
+if [ $? -ne 0 ]; then
+  echo "STOP BLOCKED: Unused exports detected by knip. Remove or unexport them." >&2
+  exit 2
+fi
+
 exit 0
 ```
 
@@ -271,7 +278,11 @@ Create `.claude/settings.json`:
 
 **NOTE:** Hook configuration format may vary by Claude Code version. Check `claude --help hooks` or the docs at code.claude.com/docs/en/hooks-guide for current syntax. The three hook types and exit code protocol (0=pass, 2=block+feedback) are stable.
 
-#### 1.6 — Configure Lefthook for pre-commit
+#### 1.6 — Configure pre-commit hooks
+
+You have two solid options for git hooks. Pick one:
+
+**Option A: Lefthook** (lightweight, no Node dependency for the hook runner itself)
 
 Create `lefthook.yml` at repo root:
 
@@ -294,23 +305,45 @@ Install:
 npx lefthook install
 ```
 
-#### 1.7 — Add npm scripts
+**Option B: Husky** (battle-tested, widely adopted, simple shell scripts)
+
+```bash
+pnpm add -D husky
+npx husky init
+```
+
+Create `.husky/pre-commit`:
+```bash
+#!/bin/bash
+pnpm run typecheck
+pnpm run lint
+npx knip --no-exit-code
+```
+
+Both work well. Lefthook has parallel execution built-in. Husky is more widely recognized. DanBot (a production codebase using this framework) runs Husky with 8 sequential pre-commit checks including custom domain validators.
+
+#### 1.7 — Add scripts
 
 Add to `package.json` scripts (merge with existing, do not replace):
 
 ```json
 {
   "scripts": {
+    "build": "tsc",
     "lint": "biome check src/",
     "lint:fix": "biome check --write src/",
     "typecheck": "tsc --noEmit",
     "knip": "knip",
     "duplication": "jscpd src/ --threshold 5",
     "circular": "madge --circular --extensions ts,tsx src/",
-    "quality": "npm run typecheck && npm run lint && npm run knip && npm run duplication && npm run circular"
+    "quality": "pnpm run build && pnpm run lint && pnpm run knip && pnpm run duplication && pnpm run circular && pnpm test"
   }
 }
 ```
+
+**NOTE:** The quality chain starts with `build` (full TypeScript compilation), not just `typecheck`. This catches errors that `--noEmit` misses (declaration file generation, output path issues). Adjust `pnpm` to your package manager (`npm`, `yarn`) if needed.
+
+Both Pharaoh and DanBot (production codebases built with this framework) use pnpm. The framework examples use `pnpm` by default — substitute your package manager as needed.
 
 #### 1.8 — Write CLAUDE.md
 
@@ -338,9 +371,9 @@ These are non-negotiable. Hooks enforce most of them automatically.
 - EVERY export must be imported somewhere — no orphan exports
 
 ### Before Committing
-- `npm run typecheck` — zero errors (enforced by hooks)
-- `npm run lint` — zero errors (enforced by hooks)
-- `npm run knip` — review any new findings
+- `pnpm run typecheck` — zero errors (enforced by hooks)
+- `pnpm run lint` — zero errors (enforced by hooks)
+- `pnpm run knip` — review any new findings
 - Tests pass for changed modules
 
 ### Test Rules
@@ -406,9 +439,9 @@ description: Pre-commit quality gate — verify everything is wired up
 
 Run these checks and report results:
 
-1. `npm run typecheck` — zero errors
-2. `npm run lint` — zero errors
-3. `npm run knip` — report any NEW unused exports/files/dependencies
+1. `pnpm run typecheck` — zero errors
+2. `pnpm run lint` — zero errors
+3. `pnpm run knip` — report any NEW unused exports/files/dependencies
 4. Check for unused imports in changed files
 5. Check that every new export is imported somewhere
 6. Check that every new file is imported by at least one other file
@@ -468,7 +501,7 @@ For the specified directory (or all tests if none specified):
 - [ ] `npx lefthook install` completes, pre-commit hook fires on `git commit`
 - [ ] CLAUDE.md exists with all `[FILL IN]` sections completed
 - [ ] All 4 slash commands exist and are recognized by Claude Code
-- [ ] `npm run quality` runs all checks in sequence
+- [ ] `pnpm run quality` runs all checks in sequence
 - [ ] No source code in `src/` was modified
 
 ---
@@ -509,20 +542,23 @@ Add these flags (merge with existing, do not replace):
 {
   "compilerOptions": {
     "strict": true,
-    "noUncheckedIndexedAccess": true,
     "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true,
     "allowUnreachableCode": false,
     "allowUnusedLabels": false,
-    "forceConsistentCasingInFileNames": true,
-    "verbatimModuleSyntax": true
+    "forceConsistentCasingInFileNames": true
   }
 }
 ```
 
 **STRATEGY FOR EXISTING ERRORS:** Run `npx tsc --noEmit` after each flag addition. If a single flag produces 50+ errors, add it with a `// @ts-expect-error` suppression file or enable it per-file with `// @ts-check`. Do NOT skip the flag — suppress and track. The goal is zero errors on `tsc --noEmit` at all times.
 
-`exactOptionalPropertyTypes` is deliberately excluded for now — it's extremely strict and will likely produce hundreds of errors in an existing codebase. Add it in Phase 5 (cleanup) after the codebase is stabilized.
+**Aspirational flags (add later, not day-one):**
+- `noUncheckedIndexedAccess` — extremely valuable but produces hundreds of errors in existing codebases. Add in Phase 5 cleanup after the codebase is stabilized.
+- `verbatimModuleSyntax` — requires all imports to use explicit `type` annotations. Can conflict with some bundler/framework setups. Add when your toolchain fully supports it.
+- `exactOptionalPropertyTypes` — the strictest flag. Defer until Phase 5.
+
+Both Pharaoh and DanBot (production codebases built with this framework) run `strict: true` with the core flags above but do NOT use `noUncheckedIndexedAccess` or `verbatimModuleSyntax`. Ship with the core flags first; add the aspirational ones when you're ready to handle the error volume.
 
 **React Native note:** Some RN libraries have loose types. You may need to add type declarations or use `skipLibCheck: true` temporarily.
 
@@ -550,30 +586,36 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # --- pnpm setup (use this if your project uses pnpm) ---
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
+          cache: 'pnpm'    # or 'npm' / 'yarn'
 
-      - run: npm ci
+      - run: pnpm install  # or: npm ci
 
-      - name: Typecheck
-        run: npx tsc --noEmit
+      # --- Quality chain (matches local `pnpm run quality`) ---
+      - name: Build
+        run: pnpm run build
 
       - name: Lint
-        run: npx biome check src/ --max-diagnostics=0
+        run: pnpm run lint
 
       - name: Dead code
-        run: npx knip
+        run: pnpm run knip
 
       - name: Duplication
-        run: npx jscpd src/ --threshold 5 --exitCode 1
+        run: pnpm run duplication
 
       - name: Circular dependencies
-        run: npx madge --circular --extensions ts,tsx src/
+        run: pnpm run circular
 
       - name: Tests
-        run: npm test -- --coverage
+        run: pnpm test
         # TODO Phase 3: add coverage thresholds
 
       - name: Net LOC tracking
@@ -582,6 +624,8 @@ jobs:
           echo "## LOC Change" >> $GITHUB_STEP_SUMMARY
           git diff --stat origin/main...HEAD >> $GITHUB_STEP_SUMMARY
 ```
+
+**npm users:** Remove the `pnpm/action-setup` step, change `cache: 'pnpm'` to `cache: 'npm'`, and use `npm ci` / `npm run` / `npm test`.
 
 **React Native note:** If you use Jest for testing (common in RN), the test command may differ. Adjust accordingly.
 
@@ -639,12 +683,12 @@ tests/** or __tests__/** — do NOT modify or delete existing tests yet (Phase 5
 
 For **Vitest** projects:
 ```bash
-npm install -D @stryker-mutator/core @stryker-mutator/typescript-checker @stryker-mutator/vitest-runner
+pnpm add -D @stryker-mutator/core @stryker-mutator/typescript-checker @stryker-mutator/vitest-runner
 ```
 
 For **Jest** projects (common in React Native):
 ```bash
-npm install -D @stryker-mutator/core @stryker-mutator/typescript-checker @stryker-mutator/jest-runner
+pnpm add -D @stryker-mutator/core @stryker-mutator/typescript-checker @stryker-mutator/jest-runner
 ```
 
 #### 3.2 — Configure Stryker
@@ -699,9 +743,9 @@ Add to `package.json`:
 ```
 
 Usage:
-- `npm run mutate:incremental` — daily, fast (only changed code)
-- `npm run mutate` — weekly, full run
-- `npm run mutate:module -- 'src/components/**/*.tsx'` — audit one module
+- `pnpm run mutate:incremental` — daily, fast (only changed code)
+- `pnpm run mutate` — weekly, full run
+- `pnpm run mutate:module -- 'src/components/**/*.tsx'` — audit one module
 
 #### 3.4 — Set coverage thresholds
 
@@ -760,32 +804,36 @@ Add to `.github/workflows/ci.yml` or create a separate weekly workflow:
 ```yaml
   mutation:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0  # needed for incremental mode
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-      - run: npm ci
+          cache: 'pnpm'
+      - run: pnpm install
       - name: Mutation testing (incremental)
-        run: npx stryker run --incremental
+        run: pnpm run mutate:incremental
       - name: Upload mutation report
         uses: actions/upload-artifact@v4
         with:
           name: mutation-report
           path: reports/mutation/
+          retention-days: 14
 ```
 
 ### Acceptance Criteria
 
-- [ ] `npm run mutate:incremental` runs and produces a mutation score
+- [ ] `pnpm run mutate:incremental` runs and produces a mutation score
 - [ ] Baseline mutation score is recorded and committed
 - [ ] Coverage thresholds are set at current coverage minus 5%
-- [ ] `npm test -- --coverage` fails if coverage drops below threshold
+- [ ] `pnpm test -- --coverage` fails if coverage drops below threshold
 - [ ] Stryker `incremental` mode works (second run is faster than first)
 - [ ] CI includes mutation testing on main branch pushes
 - [ ] No existing tests were modified or deleted
@@ -847,7 +895,7 @@ project-template/
 ```bash
 mkdir project-template && cd project-template
 git init
-npm init -y
+pnpm init
 ```
 
 #### 4.2 — Copy and generalize configs from current project
@@ -942,10 +990,10 @@ Create `scripts/bootstrap.sh`:
 # Run after cloning from template
 echo "Setting up development environment..."
 
-npm install
-npx lefthook install
+pnpm install
+npx lefthook install  # or: npx husky init
 
-echo "Setup complete. Run 'npm run quality' to verify."
+echo "Setup complete. Run 'pnpm run quality' to verify."
 echo ""
 echo "Don't forget to:"
 echo "  1. Update CLAUDE.md with project-specific details"
@@ -962,7 +1010,7 @@ echo "  3. Set up GitHub branch protection rules"
 ### Acceptance Criteria
 
 - [ ] Template repo exists on GitHub and is marked as template
-- [ ] `npm install && npm run quality` passes in a fresh clone
+- [ ] `pnpm install && pnpm run quality` passes in a fresh clone
 - [ ] Lefthook installs and pre-commit hooks work
 - [ ] Claude Code hooks are active when opening with Claude Code
 - [ ] CI workflow runs on push
@@ -1008,7 +1056,7 @@ npx knip --dependencies
 # Review output. For each flagged dependency:
 #   - Is it used via dynamic require/import? (check)
 #   - Is it a CLI tool used in scripts? (check package.json scripts)
-#   - If genuinely unused → npm uninstall <package>
+#   - If genuinely unused → pnpm remove <package>
 # Run tests after each removal batch.
 
 # Step 2: Remove unused files
@@ -1041,7 +1089,7 @@ npx knip --exports > reports/unused-exports.txt
 For each batch of 10-20 unused exports:
 1. Verify not used via dynamic access, reflection, or external consumers
 2. Delete the export keyword and the function/type/variable if nothing else uses it
-3. Run `npm test` and `npx tsc --noEmit`
+3. Run `pnpm test` and `npx tsc --noEmit`
 4. If green, continue. If red, revert that specific removal and investigate.
 
 **Expect cascading effects:** removing one export may make its imports unused, which may make their files unused. Run `npx knip` after each batch to catch cascades.
@@ -1151,7 +1199,7 @@ echo "Mutation score:" >> reports/cleanup-final.txt
 ### Weekly Ritual (30 minutes, e.g. Friday)
 
 ```
-1. npm run mutate:incremental   ← Find surviving mutants
+1. pnpm run mutate:incremental   ← Find surviving mutants
 2. Fix 3-5 weak tests           ← Improve assertions, not coverage
 3. Delete tests that kill 0 mutants
 4. Review oracle gap trend      ← coverage minus mutation score
@@ -1161,7 +1209,7 @@ echo "Mutation score:" >> reports/cleanup-final.txt
 ### Monthly Ritual (2-3 hours, e.g. first Monday)
 
 ```
-1. npm run quality              ← Full quality suite
+1. pnpm run quality              ← Full quality suite
 2. npx knip                     ← Remove any accumulated dead code
 3. npx knip --dependencies      ← Remove unused packages
 4. Review jscpd report          ← Consolidate new duplications
