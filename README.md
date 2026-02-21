@@ -54,7 +54,7 @@ Includes: Biome config, Knip config, Lefthook pre-commit hooks, Claude Code hook
 | **Every edit** | [Claude Code hooks](https://docs.anthropic.com) | Typecheck + lint after each file change. Instant feedback loop |
 | **Before commit** | [Lefthook](https://github.com/evilmartians/lefthook) or [Husky](https://typicode.github.io/husky/) | Git hooks. Lefthook: fast parallel execution. Husky: widely adopted |
 | **Before commit** | [Knip](https://knip.dev) | Dead code detection - unused exports, files, dependencies |
-| **Before commit** | Orphan detection | Catch exported functions with zero callers |
+| **Before commit** | Orphan detection | Catches exported functions with no callers |
 | **CI** | GitHub Actions | Full gate: typecheck + lint + test + knip + orphan check |
 | **CI** | [Stryker](https://stryker-mutator.io) | Mutation testing - proves tests actually catch bugs |
 | **Periodic audit** | [jscpd](https://github.com/kucherenko/jscpd) | Copy-paste duplication detection |
@@ -84,15 +84,15 @@ The secret weapon. Three hooks that run automatically:
 
 - **Post-edit hook** - Typechecks and lints after every file edit. Claude gets instant feedback and fixes issues before moving on.
 - **Pre-write hook** - Blocks writes to `.env`, lock files, `dist/`, and other sensitive files. Claude physically cannot modify them.
-- **Stop hook** - Runs typecheck + lint + knip when Claude tries to finish. If anything is broken or unused code was introduced, Claude is forced to fix it before completing.
+- **Stop hook** - Runs typecheck + lint + knip + orphan check when Claude tries to finish. If anything is broken, unused, or unwired, Claude is forced to fix it before completing.
 
 This creates a closed feedback loop that doesn't exist in other AI coding setups.
 
 ### AI Agents Write Unwired Code
 
-AI agents are prolific exporters. They'll create a utility, export it, use it in one place, then move on. Next session, different context, they build the same thing again. Over a few weeks your codebase is full of functions nobody calls.
+LLM coding agents have a systematic failure mode: they write a function, export it, mark the task "done," but never wire it into the execution path. This isn't a prompting problem - it's structural to how LLMs optimize for task completion. Next session, different context, they build the same thing again. Over a few weeks your codebase is full of functions nobody calls.
 
-Knip catches unused exports. The orphan detection script catches exports with zero callers. Between them, nothing unwired survives a commit.
+The orphan detection script catches this at three gates: Claude Code Stop hook, pre-commit, and CI. Zero escape paths.
 
 But you can also prevent it from the other direction. After implementing something, have your AI verify every new export is actually reachable from a production entry point. [Pharaoh's reachability checking](https://pharaoh.so) does this in one query - traces the call graph from entry points and flags anything disconnected. Detection at three gates plus prevention via graph means nothing slips through.
 
